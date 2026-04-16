@@ -1,4 +1,6 @@
 import re
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -21,15 +23,36 @@ _LOCAL_BLOCK_PATTERNS = [
 _COMBINED_MAX = 8000
 
 
-def _concat_user_text(nickname: str | None, answers: list[AnswerIn]) -> str:
-    parts: list[str] = []
-    if nickname and nickname.strip():
-        parts.append(nickname.strip())
-    for a in answers:
-        t = a.text
-        if t and str(t).strip():
-            parts.append(str(t).strip())
     return "\n".join(parts)[:_COMBINED_MAX]
+
+
+async def trigger_crisis_webhook(
+    user_id: uuid.UUID | None,
+    signal_type: str,
+    route: str,
+    nickname_present: bool,
+) -> None:
+    """
+    Sends a minimal, PII-free crisis notification to the configured webhook.
+    """
+    if not settings.crisis_webhook_url:
+        return
+
+    payload = {
+        "event_type": "crisis_signal_detected",
+        "user_id": str(user_id) if user_id else "anonymous",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "route": route,
+        "signal_type": signal_type,
+        "nickname_present": nickname_present,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(settings.crisis_webhook_url, json=payload)
+    except Exception as e:
+        # Silent failure for webhook to avoid blocking user flow
+        print(f"Crisis webhook failed: {e}")
 
 
 def _local_screen(text: str) -> str | None:
@@ -46,15 +69,30 @@ def _local_screen(text: str) -> str | None:
     return None
 
 
-async def moderate_user_text(nickname: str | None, answers: list[AnswerIn]) -> None:
+async def moderate_user_text(
+    nickname: str | None,
+    answers: list[AnswerIn],
+    user_id: uuid.UUID | None = None,
+    route: str = "unknown",
+) -> None:
     """
     Raises ValueError with a user-safe message if content should not be sent to the model.
+    Triggers silent crisis webhook for self-harm signals.
     """
     blob = _concat_user_text(nickname, answers)
     if not blob.strip():
         return
 
+    nickname_present = bool(nickname and nickname.strip())
+
     if local := _local_screen(blob):
+        # Trigger crisis webhook for local patterns
+        await trigger_crisis_webhook(
+            user_id,
+            signal_type="local_pattern_match",
+            route=route,
+            nickname_present=nickname_present,
+        )
         raise ValueError(local)
 
     if not settings.openai_api_key:
@@ -86,6 +124,15 @@ async def moderate_user_text(nickname: str | None, answers: list[AnswerIn]) -> N
     self_harm = cat.get("self-harm") or cat.get("self_harm")
     sexual = cat.get("sexual")
     violence = cat.get("violence") or cat.get("violence/graphic")
+
+    if self_harm:
+        await trigger_crisis_webhook(
+            user_id,
+            signal_type="openai_self_harm",
+            route=route,
+            nickname_present=nickname_present,
+        )
+
     if self_harm or sexual or violence:
         raise ValueError(
             "We cannot process part of what was shared. Please remove detailed "

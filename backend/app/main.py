@@ -25,12 +25,14 @@ from app.schemas import (
     CoachResponse,
     JournalRequest,
     MeResponse,
+    MicroActionResponse,
     ProfileRequest,
     ProfileResponse,
     PurgeMaintenanceRequest,
     PurgeMaintenanceResponse,
     ServerDataDeleteRequest,
     ServerDataDeleteResponse,
+    TrendsResponse,
 )
 
 
@@ -57,6 +59,14 @@ async def _rate_limit_me_delete(request: Request) -> None:
 
 async def _rate_limit_purge(request: Request) -> None:
     await enforce_rate_limit(request, key_suffix="purge_inactive", max_requests=8, window_sec=3600)
+
+
+async def _rate_limit_profile(request: Request) -> None:
+    await enforce_rate_limit(request, key_suffix="profile_gen", max_requests=10, window_sec=3600)
+
+
+async def _rate_limit_coach(request: Request) -> None:
+    await enforce_rate_limit(request, key_suffix="coach_chat", max_requests=10, window_sec=3600)
 
 
 async def _server_delete(session: AsyncSession | None, user_id: uuid.UUID) -> ServerDataDeleteResponse:
@@ -118,12 +128,30 @@ async def health():
 
 @app.get("/api/me", response_model=MeResponse)
 async def me(session: SessionDep, user_id: YouthUserIdDep):
+    payload = await persistence_service.fetch_me_payload(session, user_id)
+    return MeResponse.model_validate(payload)
+
+
+@app.get("/api/me/trends", response_model=TrendsResponse)
+async def me_trends(session: SessionDep, user_id: YouthUserIdDep):
     if session is None:
         raise HTTPException(status_code=503, detail="Database not configured")
     if user_id is None:
         raise HTTPException(status_code=400, detail="X-Youth-User-Id header is required")
-    payload = await persistence_service.fetch_me_payload(session, user_id)
-    return MeResponse.model_validate(payload)
+    payload = await persistence_service.fetch_trends_payload(session, user_id)
+    return TrendsResponse.model_validate(payload)
+
+
+@app.post("/api/me/micro-action", response_model=MicroActionResponse)
+async def micro_action_done(session: SessionDep, user_id: YouthUserIdDep):
+    if session is None:
+        raise HTTPException(status_code=503, detail="Database not configured")
+    if user_id is None:
+        raise HTTPException(status_code=400, detail="X-Youth-User-Id header is required")
+    res = await persistence_service.mark_micro_action_done(session, user_id)
+    if res is None:
+        raise HTTPException(status_code=404, detail="No pending micro-action found")
+    return MicroActionResponse.model_validate(res)
 
 
 @app.get("/api/me/export")
@@ -206,6 +234,8 @@ async def journal(body: JournalRequest, session: SessionDep, user_id: YouthUserI
         await moderate_user_text(
             None,
             [AnswerIn(question_id="journal", text=body.text)],
+            user_id=user_id,
+            route="/api/journal",
         )
         await persistence_service.add_journal(session, user_id, body.prompt_id, body.text)
         return {"ok": True}
@@ -222,6 +252,8 @@ async def app_help(body: AppHelpRequest):
         await moderate_user_text(
             None,
             [AnswerIn(question_id="app_help", text=last_user)],
+            user_id=None,
+            route="/api/app-help",
         )
         return await generate_app_help(body.messages)
     except ValueError as e:
@@ -231,7 +263,12 @@ async def app_help(body: AppHelpRequest):
 
 
 @app.post("/api/coach", response_model=CoachResponse)
-async def coach(body: CoachRequest, session: SessionDep, user_id: YouthUserIdDep):
+async def coach(
+    body: CoachRequest,
+    session: SessionDep,
+    user_id: YouthUserIdDep,
+    _: None = Depends(_rate_limit_coach),
+):
     try:
         validate_consent(body.age_band, body.consent)
         validate_coach_messages(body.messages)
@@ -239,6 +276,8 @@ async def coach(body: CoachRequest, session: SessionDep, user_id: YouthUserIdDep
         await moderate_user_text(
             body.nickname,
             [AnswerIn(question_id="coach_chat", text=last_user)],
+            user_id=user_id,
+            route="/api/coach",
         )
         out = await generate_coach_reply(body)
         if session is not None and user_id is not None:
@@ -251,10 +290,20 @@ async def coach(body: CoachRequest, session: SessionDep, user_id: YouthUserIdDep
 
 
 @app.post("/api/profile", response_model=ProfileResponse)
-async def profile(body: ProfileRequest, session: SessionDep, user_id: YouthUserIdDep):
+async def profile(
+    body: ProfileRequest,
+    session: SessionDep,
+    user_id: YouthUserIdDep,
+    _: None = Depends(_rate_limit_profile),
+):
     try:
         validate_consent(body.age_band, body.consent)
-        await moderate_user_text(body.nickname, body.answers)
+        await moderate_user_text(
+            body.nickname,
+            body.answers,
+            user_id=user_id,
+            route="/api/profile",
+        )
         if database_enabled() and user_id is None:
             raise HTTPException(
                 status_code=400,

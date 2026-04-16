@@ -31,6 +31,7 @@ class ProfileRun(Base):
     strengths: Mapped[list[Any]] = mapped_column(JSONB)
     narrative: Mapped[str] = mapped_column(Text())
     micro_action: Mapped[str] = mapped_column(Text())
+    micro_action_done: Mapped[bool] = mapped_column(default=False)
     reflection_prompt: Mapped[str] = mapped_column(Text())
     demo_mode: Mapped[bool] = mapped_column(default=False)
     result_hash: Mapped[str] = mapped_column(String(200), index=True)

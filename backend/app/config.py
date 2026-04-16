@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     data_retention_days: int | None = Field(default=None, ge=1, le=3650)
     maintenance_secret: str | None = None
 
+    crisis_webhook_url: str | None = None
+
     @field_validator("openai_api_key", "groq_api_key", mode="before")
     @classmethod
     def strip_api_keys(cls, v: object) -> object:

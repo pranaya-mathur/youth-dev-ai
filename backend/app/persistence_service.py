@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -144,19 +145,35 @@ async def save_profile_run_if_new(
     }
 
 
-async def add_journal(session: AsyncSession, user_id: uuid.UUID, prompt_id: str, text: str) -> None:
-    await _ensure_user(session, user_id)
-    g = await _get_or_create_gamification(session, user_id)
-    g.xp += 8
-    g.updated_at = datetime.now(timezone.utc)
-    session.add(
-        JournalEntry(
-            id=uuid.uuid4(),
-            user_id=user_id,
-            prompt_id=prompt_id[:64],
-            body=text[:2000],
         )
     )
+
+
+async def mark_micro_action_done(session: AsyncSession, user_id: uuid.UUID) -> dict[str, Any] | None:
+    """
+    Finds the latest ProfileRun for the user that isn't done yet, marks it done, and adds 15 XP.
+    """
+    row = (
+        (
+            await session.execute(
+                select(ProfileRun)
+                .where(ProfileRun.user_id == user_id, ProfileRun.micro_action_done == False)
+                .order_by(ProfileRun.created_at.desc())
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if row is None:
+        return None
+
+    row.micro_action_done = True
+    g = await _get_or_create_gamification(session, user_id)
+    xp_gain = 15
+    g.xp += xp_gain
+    g.updated_at = datetime.now(timezone.utc)
+    return {"xp_gained": xp_gain, "xp_total": g.xp}
 
 
 async def append_coach_exchange(
@@ -233,6 +250,70 @@ async def fetch_me_payload(session: AsyncSession, user_id: uuid.UUID) -> dict[st
             "last_streak_mark": g.last_streak_mark,
         },
         "journal": journal_out,
+    }
+
+
+async def fetch_trends_payload(session: AsyncSession, user_id: uuid.UUID) -> dict[str, Any]:
+    """
+    Aggregates top recurring strengths, identity history, and estimated XP progression.
+    """
+    runs = (
+        (
+            await session.execute(
+                select(ProfileRun)
+                .where(ProfileRun.user_id == user_id)
+                .order_by(ProfileRun.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    all_strengths: list[str] = []
+    identity_history: list[dict[str, Any]] = []
+    xp_events: list[dict[str, Any]] = []
+
+    for r in runs:
+        all_strengths.extend(r.strengths or [])
+        identity_history.append({"at": r.created_at.isoformat(), "name": r.identity_name})
+        xp_events.append({"at": r.created_at, "gain": 55, "type": "profile"})
+        if r.micro_action_done:
+            # We don't have a timestamp for when it was done, so we stick it near the profile run
+            # or just ignore it for the arc if precision isn't critical.
+            # For now, let's assume it was done shortly after.
+            xp_events.append({"at": r.created_at + timedelta(hours=1), "gain": 15, "type": "micro_action"})
+
+    journals = (
+        (
+            await session.execute(
+                select(JournalEntry)
+                .where(JournalEntry.user_id == user_id)
+                .order_by(JournalEntry.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for j in journals:
+        xp_events.append({"at": j.created_at, "gain": 8, "type": "journal"})
+
+    # Sort events by time to build the progression arc
+    xp_events.sort(key=lambda x: x["at"])
+    progression: list[dict[str, Any]] = []
+    cumulative_xp = 0
+    for e in xp_events:
+        cumulative_xp += e["gain"]
+        progression.append({"at": e["at"].isoformat(), "xp": cumulative_xp, "type": e["type"]})
+
+    top_strengths = [
+        {"name": s, "count": c} for s, c in Counter(all_strengths).most_common(8)
+    ]
+
+    return {
+        "user_id": str(user_id),
+        "top_strengths": top_strengths,
+        "identity_history": identity_history,
+        "xp_progression": progression,
     }
 
 

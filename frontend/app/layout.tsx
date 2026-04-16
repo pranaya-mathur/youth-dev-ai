@@ -33,7 +33,27 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${dm.variable} ${syne.variable}`}>
-      <body className="font-sans">{children}</body>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+      </head>
+      <body className="font-sans">
+        {children}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    console.log('SW registered');
+                  }, function(err) {
+                    console.log('SW registration failed: ', err);
+                  });
+                });
+              }
+            `,
+          }}
+        />
+      </body>
     </html>
   );
 }

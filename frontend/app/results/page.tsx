@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { Button } from "@/components/Button";
+import { RadarChart } from "@/components/RadarChart";
+import html2canvas from "html2canvas";
 import { fetchMe, fetchProfile } from "@/lib/api";
 import { badgeLabel, levelFromXp, type GamificationDelta } from "@/lib/gamification";
 import { opportunitiesFromStrengths } from "@/lib/opportunities";
@@ -147,6 +149,25 @@ export default function ResultsPage() {
 
   const opportunities = opportunitiesFromStrengths(data.strengths);
 
+  async function shareCard() {
+    const el = document.getElementById("profile-capture-card");
+    if (!el) return;
+    try {
+      const canvas = await html2canvas(el, {
+        backgroundColor: "#000",
+        scale: 2,
+        logging: false,
+        useCORS: true,
+      });
+      const link = document.createElement("a");
+      link.download = `youth-dev-profile-${data.identity_name.replace(/\s+/g, "-").toLowerCase()}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (err) {
+      console.error("Failed to generate card image", err);
+    }
+  }
+
   return (
     <Shell
       eyebrow="Your living snapshot"
@@ -181,30 +202,40 @@ export default function ResultsPage() {
       ) : null}
 
       <div className="space-y-6">
-        <section className="glass-panel relative overflow-hidden p-8 shadow-card">
+        <section
+          id="profile-capture-card"
+          className="glass-panel relative overflow-hidden p-8 shadow-card"
+        >
           <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-bloom-500/25 blur-2xl" />
-          <p className="text-xs font-semibold uppercase tracking-widest text-aqua-400">
-            Symbolic identity
-          </p>
-          <h2 className="mt-3 font-display text-3xl text-gradient sm:text-4xl">
-            {data.identity_name}
-          </h2>
-          <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-bloom-300">
-            Power indicators
-          </p>
-          <p className="mt-1 text-sm text-zinc-500">
-            Positive qualities the AI noticed in you—signals of hope, connection, and
-            growing confidence.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {data.strengths.map((s) => (
-              <span
-                key={s}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-200"
-              >
-                {s}
-              </span>
-            ))}
+          <div className="grid gap-8 md:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-aqua-400">
+                Symbolic identity
+              </p>
+              <h2 className="mt-3 font-display text-3xl text-gradient sm:text-4xl">
+                {data.identity_name}
+              </h2>
+              <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-bloom-300">
+                Power indicators
+              </p>
+              <p className="mt-1 text-sm text-zinc-500">
+                Positive qualities the AI noticed in you—signals of hope, connection, and
+                growing confidence.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {data.strengths.map((s) => (
+                  <span
+                    key={s}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-200"
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-center rounded-2xl bg-white/[0.02] p-4">
+              <RadarChart labels={data.strengths} />
+            </div>
           </div>
         </section>
 
@@ -260,6 +291,9 @@ export default function ResultsPage() {
         <div className="flex flex-wrap gap-3 pt-4">
           <Button type="button" variant="soft" onClick={() => router.push("/profile")}>
             Open living profile
+          </Button>
+          <Button type="button" variant="ghost" onClick={shareCard}>
+            Download Power Card
           </Button>
           <Button type="button" variant="ghost" onClick={() => router.push("/check-in")}>
             Weekly check-in

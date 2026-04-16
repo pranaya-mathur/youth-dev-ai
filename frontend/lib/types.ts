@@ -85,3 +85,32 @@ export type MeResponse = {
   gamification: MeGamification;
   journal: MeJournalEntry[];
 };
+
+export type RecurringStrength = {
+  name: string;
+  count: number;
+};
+
+export type IdentityHistoryItem = {
+  at: string;
+  name: string;
+};
+
+export type XPProgressItem = {
+  at: string;
+  xp: number;
+  type: string;
+};
+
+export type TrendsResponse = {
+  user_id: string;
+  top_strengths: RecurringStrength[];
+  identity_history: IdentityHistoryItem[];
+  xp_progression: XPProgressItem[];
+};
+
+export type MicroActionResponse = {
+  ok: boolean;
+  xp_gained: number;
+  xp_total: number;
+};

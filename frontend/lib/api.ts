@@ -4,8 +4,10 @@ import type {
   CoachChatMessage,
   ConsentRecord,
   MeResponse,
+  MicroActionResponse,
   ProfileResult,
   StoredAnswer,
+  TrendsResponse,
 } from "./types";
 import { loadConsent } from "./session";
 import { getYouthUserId } from "./youth-user-id";
@@ -213,6 +215,27 @@ export async function fetchMeExportBlob(): Promise<Blob> {
     throw new Error(await readErrorMessage(res));
   }
   return res.blob();
+}
+
+export async function fetchTrends(): Promise<TrendsResponse> {
+  const res = await apiFetch(`${apiBase()}/api/me/trends`, {
+    headers: { ...youthHeaders() },
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json() as Promise<TrendsResponse>;
+}
+
+export async function postMicroActionDone(): Promise<MicroActionResponse> {
+  const res = await apiFetch(`${apiBase()}/api/me/micro-action`, {
+    method: "POST",
+    headers: { ...youthHeaders() },
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json() as Promise<MicroActionResponse>;
 }
 
 export async function deleteServerUserData(): Promise<{ had_server_rows: boolean }> {

@@ -111,3 +111,32 @@ class PurgeMaintenanceRequest(BaseModel):
 class PurgeMaintenanceResponse(BaseModel):
     ok: bool = True
     deleted_user_rows: int
+
+
+class RecurringStrength(BaseModel):
+    name: str
+    count: int
+
+
+class IdentityHistoryItem(BaseModel):
+    at: str
+    name: str
+
+
+class XPProgressItem(BaseModel):
+    at: str
+    xp: int
+    type: str
+
+
+class TrendsResponse(BaseModel):
+    user_id: str
+    top_strengths: list[RecurringStrength]
+    identity_history: list[IdentityHistoryItem]
+    xp_progression: list[XPProgressItem]
+
+
+class MicroActionResponse(BaseModel):
+    ok: bool = True
+    xp_gained: int
+    xp_total: int

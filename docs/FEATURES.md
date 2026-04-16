@@ -65,13 +65,18 @@ Implemented in this codebase:
 - **Check-ins + journal:** **`/check-in`** with rotating weekly prompts and local-only entries.
 - **Play hub + coach chat:** **`/play`** surfaces XP / badges / streaks; **`/coach`** is a multi-turn strengths coach (`POST /api/coach`, Groq or OpenAI when keys are set; mock lines only if **`ALLOW_LLM_DEMO=true`** in backend env).
 - **Opportunity nudges:** curated, strength-linked suggestion blocks on the **results** page.
-- **Parent verification:** **`/parent`** documents the gap vs true verified consent (engineering placeholder, not a legal product).
+- **Guardian Dashboard:** **`/parent`** landing page with growth analytics, XP/streak summary, and data portfolio export (one-way sync from user device).
+- **Strength Trends & Analytics:** **`GET /api/me/trends`** with XP growth arc graphs and recurring strength patterns.
+- **Enhanced Gamification:** Levels, XP progression charts, and a **Daily Micro-Action Tracker** (+15 XP).
+- **Silent Crisis Webhook**: Admin alerting for self-harm detection via **`CRISIS_WEBHOOK_URL`**.
+- **PWA Support**: Offline-first, installable experience with service workers and manifest.
+- **Rate Limiting**: IP-based abuse prevention on LLM endpoints.
 
 Still not implemented (needs heavier product / infra):
 
-- Full server accounts + PostgreSQL persistence, verified parental consent **workflows** (OTP / payment micro-verification), parent/school dashboards.
+- **Verified** parental consent **workflows** (OTP / payment micro-verification micro-transactions).
 - **True** session-by-session AI-authored question streams (beyond copy variants + the unified profile call).
-- Full quest maps, economies, analytics, and multilingual content pipelines.
+- Full quest maps, marketplace economies, and deep regional analytics.
 
 ---
 

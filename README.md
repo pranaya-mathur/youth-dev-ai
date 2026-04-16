@@ -6,17 +6,18 @@ Strength-first youth experience (ages **11–18**): story-style moments → AI *
 
 ---
 
-## Current state (this repo)
+## Current State & Highlights
 
-| Area | What you get |
-|------|----------------|
-| **Journey** | Home → onboarding → **consent** (`/consent`) → **12 scenarios** → **results** with opportunity nudges → optional **living profile** (`/profile`), **weekly check-in** (`/check-in`), **Play hub** (`/play`). **In-app assistant** (`/coach`, Home panel, Play hub): Youth Dev Q&A **without** consent. Policies: `/privacy`, `/terms`, `/data-rights`. `/parent` is a placeholder for future verified guardian flows. |
-| **AI profile** | `POST /api/profile` — consent + moderation. **Groq** preferred when `GROQ_API_KEY` is set, else **OpenAI** when `OPENAI_API_KEY` is set. **Default: no mock LLM**—without keys, profile returns **400** unless `ALLOW_LLM_DEMO=true` (local/offline only). |
-| **App assistant** | `POST /api/app-help` — **no consent**; product / navigation help only; **not** written to coach history in Postgres. Same LLM routing as profile; mock only if `ALLOW_LLM_DEMO=true`. Legacy **`POST /api/coach`** (personal strengths chat + consent) remains for integrators. |
-| **Gamification** | **+55 XP** per **new** AI profile (deduped by a hash of identity + strengths), **+8 XP** per journal entry. Badges and streaks follow `frontend/lib/gamification.ts` (mirrored on the server when Postgres is on). Nav **Lv · XP** chip appears once XP is above zero and refreshes on navigation. |
-| **Persistence** | **Without Postgres:** snapshots, XP, journal, and session data live in **browser storage** only. **With Postgres:** set `DATABASE_URL`; the API stores users, profile runs, gamification, journal rows, and coach exchanges. The app sends a stable anonymous **`X-Youth-User-Id`** (UUID in `localStorage`) and syncs from **`GET /api/me`** into the UI cache. **`POST /api/profile` requires that header when the database is enabled** (the Next.js client sets it automatically). |
-| **Health check** | `GET /health` — `ok`, `llm_provider`, `demo_mode`, **`allow_llm_demo`**, `openai_moderation_configured`, **`database_configured`**, **`retention_maintenance_configured`**. |
-| **UI & language** | Fixed copy is **English** (`lang="en"` in the Next.js layout). **Mobile:** quick links for Play, Coach, Profile, and Check-in appear under the header on small screens. **LLM output:** profile and coach system prompts in `backend/app/ai_pipeline.py` and `backend/app/coach_pipeline.py` instruct **standard English only** (no Hindi/Hinglish or mixed-language replies). |
+| Category | Features & Capabilities |
+| :--- | :--- |
+| 🛡️ **Safety** | **Silent Crisis Webhook**: PII-free admin alerts via `CRISIS_WEBHOOK_URL` for self-harm signals. **OpenAI Moderation** integration. |
+| 📊 **Analytics** | **Strength Trends API**: Growth arcs, recurring strengths, and historical progression (`/api/me/trends`). |
+| 🗺️ **Visuals** | **Power Map (Radar Chart)** for strength distribution. **Downloadable Power Cards** (HTML2Canvas PNG export). |
+| 📈 **Engagement** | **Vertical Journey Timeline**. **Daily Micro-Action Tracker** with XP rewards (+15 XP). |
+| 🎮 **Gamification** | Level systems, XP progression charts (Chart.js), badges, and streak tracking. |
+| 👪 **Guardians** | **Guardian Dashboard (`/parent`)**: Read-only progress sync, data export, and transparency landing page. |
+| 📱 **Platform** | **PWA Support**: Offline-first, installable on mobile. **Rate Limiting** (10 req/hr) on AI endpoints. |
+| 🌐 **Localization** | **English-Only**: Strict standard English AI reasoning and UI. |
 
 ---
 
@@ -90,6 +91,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 | `MAINTENANCE_SECRET` | Optional **pair** with `DATA_RETENTION_DAYS`. Min **12** characters when set. |
 | `ALLOWED_ORIGINS` | CORS; default includes `http://localhost:3000`. |
 | `ALLOW_LLM_DEMO` | Default **`false`**: no mock profile/coach without keys. Set **`true`** only for local UI without LLM keys. |
+| `CRISIS_WEBHOOK_URL` | Optional. URL for silent admin alerts on self-harm detection. |
 
 **Postgres:** from the repo root:
 
@@ -122,7 +124,9 @@ npm run dev
 | `POST` | `/api/profile` | Generate profile from answers + consent. |
 | `POST` | `/api/coach` | Coach reply from chat history + consent. |
 | `GET` | `/api/me` | Full sync payload when DB is on (**requires** `X-Youth-User-Id`). |
-| `GET` | `/api/me/export` | Full portable JSON export when DB is on (**requires** header). Rate-limited per IP. |
+| `GET` | `/api/me/trends` | Aggregated identity history, top strengths, and XP growth arc. |
+| `POST` | `/api/me/micro-action` | Mark pending micro-action as done (+15 XP). |
+| `GET` | `/api/me/export` | Full portable JSON export when DB is on (**requires** header). |
 | `POST` | `/api/me/delete` | **Preferred** server erasure: JSON body `{"confirm":"delete_my_server_data"}` + `X-Youth-User-Id`. Rate-limited per IP. |
 | `DELETE` | `/api/me` | Same as delete (legacy); **requires** header. Shares rate limit with `POST /api/me/delete`. |
 | `POST` | `/api/internal/maintenance/purge-inactive-users` | JSON body `{"confirm":"purge_inactive_users"}` + header `X-Maintenance-Secret`. Purge is rate-limited per IP. |
