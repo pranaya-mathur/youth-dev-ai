@@ -1,0 +1,29 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependency directories (shared or root level)
+node_modules/
+venv/
+.venv/
+
+# Environment files
+.env
+.env.local
+compose.env
+
+# IDEs
+.vscode/
+.idea/
+
+# Docker
+.docker/
+
+# Platform specific
+backend/.venv/
+frontend/.next/
+frontend/out/
+
+# Python artifacts
+*.pyc
+__pycache__/
