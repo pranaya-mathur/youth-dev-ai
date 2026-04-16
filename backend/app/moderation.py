@@ -22,7 +22,13 @@ _LOCAL_BLOCK_PATTERNS = [
 
 _COMBINED_MAX = 8000
 
-
+def _concat_user_text(nickname: str | None, answers: list[AnswerIn]) -> str:
+    parts: list[str] = []
+    if nickname and nickname.strip():
+        parts.append(nickname.strip())
+    for a in answers:
+        if a.text and a.text.strip():
+            parts.append(a.text.strip())
     return "\n".join(parts)[:_COMBINED_MAX]
 
 

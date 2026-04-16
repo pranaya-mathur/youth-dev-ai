@@ -173,11 +173,6 @@ export default function ProfilePage() {
         <Button type="button" variant="ghost" onClick={() => router.push("/check-in")}>
           Weekly check-in
         </Button>
-          <Button type="button" variant="ghost" onClick={() => router.push("/parent")}>
-            Guardian view
-          </Button>
-        </div>
-
         <Button type="button" variant="ghost" onClick={() => router.push("/parent")}>
           Guardian view
         </Button>

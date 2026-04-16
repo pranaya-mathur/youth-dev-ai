@@ -145,10 +145,6 @@ async def save_profile_run_if_new(
     }
 
 
-        )
-    )
-
-
 async def mark_micro_action_done(session: AsyncSession, user_id: uuid.UUID) -> dict[str, Any] | None:
     """
     Finds the latest ProfileRun for the user that isn't done yet, marks it done, and adds 15 XP.

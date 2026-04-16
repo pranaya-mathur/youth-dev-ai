@@ -151,7 +151,7 @@ export default function ResultsPage() {
 
   async function shareCard() {
     const el = document.getElementById("profile-capture-card");
-    if (!el) return;
+    if (!el || !data) return;
     try {
       const canvas = await html2canvas(el, {
         backgroundColor: "#000",
