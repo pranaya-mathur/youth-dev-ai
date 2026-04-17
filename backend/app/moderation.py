@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -8,8 +9,21 @@ import httpx
 from app.config import settings
 from app.schemas import AnswerIn
 
-# Conservative local guardrails when the Moderations API is unavailable (demo / no key).
-_LOCAL_BLOCK_PATTERNS = [
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Local guardrail patterns
+# ---------------------------------------------------------------------------
+# All patterns are tested with re.search(pat, text, re.I) — one consistent
+# strategy throughout.
+#
+# NOTE: \bcp\b was removed — it causes unacceptable false positives
+# (e.g. "cp command", "Capricorn", copy-paste abbreviations) and the
+# OpenAI Moderations API handles CSAM detection reliably when a key is
+# present. The explicit "child porn" / "childporn" substring check below
+# covers the clearest plaintext form without regex.
+# ---------------------------------------------------------------------------
+_LOCAL_BLOCK_PATTERNS: list[str] = [
     r"\bkill\s+myself\b",
     r"\bkms\b",
     r"\bsuicid\w*\b",
@@ -17,10 +31,11 @@ _LOCAL_BLOCK_PATTERNS = [
     r"\bself[- ]harm\b",
     r"\bcut\s+myself\b",
     r"\bchild\s+porn\b",
-    r"\bcp\b",  # risky false positive; only used with other signals—skip standalone \bcp\b
+    r"\bcsam\b",
 ]
 
 _COMBINED_MAX = 8000
+
 
 def _concat_user_text(nickname: str | None, answers: list[AnswerIn]) -> str:
     parts: list[str] = []
@@ -56,15 +71,23 @@ async def trigger_crisis_webhook(
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             await client.post(settings.crisis_webhook_url, json=payload)
-    except Exception as e:
+    except Exception as exc:
         # Silent failure for webhook to avoid blocking user flow
-        print(f"Crisis webhook failed: {e}")
+        logger.warning("Crisis webhook failed: %s", exc)
 
 
 def _local_screen(text: str) -> str | None:
+    """Return a user-safe refusal message if local patterns match, else None."""
     lowered = text.lower()
+
+    # Explicit CSAM plaintext check (no regex needed for these fixed strings)
     if "child porn" in lowered or "childporn" in lowered:
-        return "This content cannot be processed. If you or someone else is unsafe, contact local emergency services or a trusted adult."
+        return (
+            "This content cannot be processed. "
+            "If you or someone else is unsafe, contact local emergency services or a trusted adult."
+        )
+
+    # Single consistent strategy: re.search with IGNORECASE
     for pat in _LOCAL_BLOCK_PATTERNS:
         if re.search(pat, lowered, re.I):
             return (
@@ -72,6 +95,7 @@ def _local_screen(text: str) -> str | None:
                 "This space is not for crisis support. Please talk to a trusted adult "
                 "or a local helpline. You can continue without sharing that kind of detail in optional notes."
             )
+
     return None
 
 

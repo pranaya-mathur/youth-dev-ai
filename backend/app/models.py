@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -31,9 +31,9 @@ class ProfileRun(Base):
     strengths: Mapped[list[Any]] = mapped_column(JSONB)
     narrative: Mapped[str] = mapped_column(Text())
     micro_action: Mapped[str] = mapped_column(Text())
-    micro_action_done: Mapped[bool] = mapped_column(default=False)
+    micro_action_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     reflection_prompt: Mapped[str] = mapped_column(Text())
-    demo_mode: Mapped[bool] = mapped_column(default=False)
+    demo_mode: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     result_hash: Mapped[str] = mapped_column(String(200), index=True)
     answers_json: Mapped[list[Any]] = mapped_column(JSONB)
 

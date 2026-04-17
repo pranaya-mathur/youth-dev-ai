@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import uuid
@@ -36,6 +39,9 @@ from app.schemas import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 def _parse_youth_user_id(x: str | None = Header(default=None, alias="X-Youth-User-Id")) -> uuid.UUID | None:
     if x is None or not str(x).strip():
         return None
@@ -45,7 +51,44 @@ def _parse_youth_user_id(x: str | None = Header(default=None, alias="X-Youth-Use
         raise HTTPException(status_code=400, detail="X-Youth-User-Id must be a valid UUID") from e
 
 
-YouthUserIdDep = Annotated[uuid.UUID | None, Depends(_parse_youth_user_id)]
+def _verify_user_token(
+    x_user_id: str | None = Header(default=None, alias="X-Youth-User-Id"),
+    x_token: str | None = Header(default=None, alias="X-Youth-Auth-Token"),
+) -> uuid.UUID | None:
+    """When AUTH_SECRET is configured, verify the HMAC-SHA256 token.
+
+    Token format expected from clients:
+        HMAC-SHA256(key=AUTH_SECRET, msg=user_id_as_string)
+
+    When AUTH_SECRET is not set the app runs in *unsigned device-id mode* —
+    any UUID is accepted without verification. Suitable for local dev only.
+    """
+    if x_user_id is None or not x_user_id.strip():
+        return None
+    try:
+        uid = uuid.UUID(x_user_id.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="X-Youth-User-Id must be a valid UUID") from e
+
+    auth_secret = settings.auth_secret
+    if auth_secret:
+        if not x_token:
+            raise HTTPException(
+                status_code=401,
+                detail="X-Youth-Auth-Token header is required when the server has AUTH_SECRET configured.",
+            )
+        expected = hmac.new(
+            auth_secret.encode(),
+            x_user_id.strip().encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(expected, x_token.strip()):
+            raise HTTPException(status_code=401, detail="Invalid auth token.")
+
+    return uid
+
+
+YouthUserIdDep = Annotated[uuid.UUID | None, Depends(_verify_user_token)]
 SessionDep = Annotated[AsyncSession | None, Depends(get_session_optional)]
 
 
@@ -118,6 +161,7 @@ async def health():
         "llm_routing_hint": hint,
         "openai_moderation_configured": bool(settings.openai_api_key),
         "database_configured": database_enabled(),
+        "auth_mode": "hmac_token" if settings.auth_secret else "unsigned_device_id",
         "retention_maintenance_configured": bool(
             settings.maintenance_secret
             and settings.data_retention_days is not None
@@ -180,7 +224,8 @@ async def delete_me_post(
     user_id: YouthUserIdDep,
     _: None = Depends(_rate_limit_me_delete),
 ):
-    _ = body.confirm
+    if body.confirm != "delete_my_server_data":
+        raise HTTPException(status_code=400, detail="confirm must equal 'delete_my_server_data'")
     if session is None:
         raise HTTPException(status_code=503, detail="Database not configured")
     if user_id is None:
@@ -209,7 +254,8 @@ async def purge_inactive_users(
     x_maintenance_secret: str | None = Header(default=None, alias="X-Maintenance-Secret"),
     _: None = Depends(_rate_limit_purge),
 ):
-    _ = body.confirm
+    if body.confirm != "purge_inactive_users":
+        raise HTTPException(status_code=400, detail="confirm must equal 'purge_inactive_users'")
     if not settings.maintenance_secret or settings.data_retention_days is None:
         raise HTTPException(status_code=404, detail="Not found")
     if settings.data_retention_days < 1:

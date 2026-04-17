@@ -31,7 +31,11 @@ def _days_between(a: str, b: str) -> int:
 
 
 def _answers_to_json(answers: list[AnswerIn]) -> list[dict[str, Any]]:
-    return [a.model_dump() for a in answers]
+    """Persist only structured (MCQ) fields — omit free-text to avoid storing PII."""
+    return [
+        {"question_id": a.question_id, "mcq_id": a.mcq_id}
+        for a in answers
+    ]
 
 
 async def _ensure_user(session: AsyncSession, user_id: uuid.UUID) -> None:
@@ -39,6 +43,9 @@ async def _ensure_user(session: AsyncSession, user_id: uuid.UUID) -> None:
     now = datetime.now(timezone.utc)
     if row is None:
         session.add(User(id=user_id, created_at=now, last_seen_at=now))
+        # Flush so the row exists before any child INSERT in the same request.
+        # Otherwise SQLAlchemy may emit profile_runs / journal / coach rows before users.
+        await session.flush()
     else:
         row.last_seen_at = now
 
@@ -184,8 +191,24 @@ async def append_coach_exchange(
     session.add(CoachMessage(id=uuid.uuid4(), user_id=user_id, role="assistant", content=assistant_text[:4000]))
 
 
-async def fetch_me_payload(session: AsyncSession, user_id: uuid.UUID) -> dict[str, Any]:
-    await _ensure_user(session, user_id)
+async def fetch_me_payload(session: AsyncSession | None, user_id: uuid.UUID) -> dict[str, Any]:
+    # Do NOT call _ensure_user here — GET endpoints must not create ghost rows.
+    if session is None:
+        return {
+            "user_id": str(user_id),
+            "snapshots": [],
+            "gamification": {"xp": 0, "badges": [], "streak_days": 0, "last_streak_mark": None},
+            "journal": [],
+        }
+
+    urow = await session.get(User, user_id)
+    if urow is None:
+        return {
+            "user_id": str(user_id),
+            "snapshots": [],
+            "gamification": {"xp": 0, "badges": [], "streak_days": 0, "last_streak_mark": None},
+            "journal": [],
+        }
 
     runs = (
         (
@@ -299,7 +322,14 @@ async def fetch_trends_payload(session: AsyncSession, user_id: uuid.UUID) -> dic
     cumulative_xp = 0
     for e in xp_events:
         cumulative_xp += e["gain"]
-        progression.append({"at": e["at"].isoformat(), "xp": cumulative_xp, "type": e["type"]})
+        at_val = e["at"]
+        progression.append(
+            {
+                "at": at_val.isoformat() if isinstance(at_val, datetime) else at_val,
+                "xp": cumulative_xp,
+                "type": e["type"],
+            }
+        )
 
     top_strengths = [
         {"name": s, "count": c} for s, c in Counter(all_strengths).most_common(8)
@@ -435,6 +465,29 @@ async def fetch_full_export_payload(session: AsyncSession, user_id: uuid.UUID) -
         "journal": journal_out,
         "coach_messages": coach_out,
     }
+
+
+
+
+async def add_journal(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    prompt_id: str,
+    text: str,
+) -> None:
+    """Persist a journal entry and award 8 XP."""
+    await _ensure_user(session, user_id)
+    session.add(
+        JournalEntry(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            prompt_id=prompt_id,
+            body=text[:2000],
+        )
+    )
+    g = await _get_or_create_gamification(session, user_id)
+    g.xp += 8
+    g.updated_at = datetime.now(timezone.utc)
 
 
 async def purge_users_inactive_older_than(session: AsyncSession, days: int) -> int:

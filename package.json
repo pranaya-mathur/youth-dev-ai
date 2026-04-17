@@ -5,9 +5,11 @@
     "setup": "cd backend && python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt && cd ../frontend && npm install",
     "dev": "concurrently -k -n api,web -c magenta,cyan \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "cd backend && ./.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
-    "dev:web": "cd frontend && npm run dev"
+    "dev:web": "cd frontend && npm run dev",
+    "browser:smoke": "node scripts/browser-smoke.mjs"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "playwright": "^1.49.1"
   }
 }

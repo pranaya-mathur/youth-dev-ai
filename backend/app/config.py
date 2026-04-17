@@ -30,6 +30,14 @@ class Settings(BaseSettings):
 
     crisis_webhook_url: str | None = None
 
+    # Auth — set a random secret (>= 32 chars) to enable HMAC-token verification.
+    # Without this the app runs in unsigned-device-id mode (dev/demo only).
+    auth_secret: str | None = None
+
+    # Rate limiting — set to enable shared Redis counter across workers.
+    # e.g. redis://localhost:6379/0
+    redis_url: str | None = None
+
     @field_validator("openai_api_key", "groq_api_key", mode="before")
     @classmethod
     def strip_api_keys(cls, v: object) -> object:
