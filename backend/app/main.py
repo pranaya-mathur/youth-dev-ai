@@ -141,6 +141,12 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+async def root():
+    """Cloud Run / browser base URL — API lives under /api/* and /health."""
+    return {"service": "Youth Dev AI", "health": "/health", "openapi": "/openapi.json", "docs": "/docs"}
+
+
 @app.get("/health")
 async def health():
     llm = settings.effective_llm_provider()

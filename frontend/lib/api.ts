@@ -12,18 +12,25 @@ import type {
 import { loadConsent } from "./session";
 import { getYouthUserId } from "./youth-user-id";
 
-/** Browser dev: same-origin proxy. Server / prod: direct URL. */
+/**
+ * Browser: same-origin `/api-proxy` → App Router forwards to `BACKEND_URL` (no CORS, no build-time API URL).
+ * Server (RSC/SSR): talks to `BACKEND_URL` or `NEXT_PUBLIC_API_URL` or local default.
+ * Set `NEXT_PUBLIC_API_PROXY=false` and `NEXT_PUBLIC_API_URL` to bypass the proxy (browser must match API CORS).
+ */
 function apiBase(): string {
-  const env = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "";
   const proxyOff = process.env.NEXT_PUBLIC_API_PROXY === "false";
+  const backend = (process.env.BACKEND_URL || "").replace(/\/$/, "").trim();
+  const pub = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "").trim();
 
   if (typeof window === "undefined") {
-    return env || "http://127.0.0.1:8000";
+    if (backend) return backend;
+    if (pub) return pub;
+    return "http://127.0.0.1:8000";
   }
-  if (process.env.NODE_ENV === "development" && !proxyOff) {
-    return "/api-proxy";
+  if (proxyOff) {
+    return pub || "http://127.0.0.1:8000";
   }
-  return env || "http://127.0.0.1:8000";
+  return "/api-proxy";
 }
 
 async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
@@ -31,10 +38,25 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
     return await fetch(input, init);
   } catch (e) {
     if (e instanceof TypeError && String(e.message).toLowerCase().includes("fetch")) {
+      const isBrowser = typeof window !== "undefined";
+      const isDev = process.env.NODE_ENV === "development";
+
+      if (isBrowser && isDev) {
+        throw new Error(
+          "Could not reach the Youth API. Start the backend on port 8000, or set BACKEND_URL in frontend/.env.local. " +
+            "From the repo root you can run `npm run dev` (API + web together)."
+        );
+      }
+
+      if (isBrowser && !isDev) {
+        throw new Error(
+          "Could not reach the Youth API through this site. On Cloud Run, set **BACKEND_URL** on the **web** service " +
+            "to your API base URL (e.g. https://youth-dev-api-….run.app), redeploy the web service — no image rebuild required."
+        );
+      }
+
       throw new Error(
-        "Could not reach the Youth API (port 8000). Start the backend: from the **repository root** run `npm run dev` " +
-          "(starts API + Next together). If you only run `cd frontend && npm run dev`, open a second terminal and run: " +
-          "`cd backend && ./.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`."
+        `Could not reach the Youth API (${apiBase()}). Set BACKEND_URL (or NEXT_PUBLIC_API_URL if using direct mode) for server-side calls.`
       );
     }
     throw e;

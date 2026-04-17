@@ -3,14 +3,11 @@ const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
   /**
-   * In `next dev`, browser calls go to `/api-proxy/*` (same origin) so chat/API work on a phone or
-   * `http://192.168.x.x:3000` without putting a LAN IP in NEXT_PUBLIC_API_URL.
+   * Browser calls `/api-proxy/*` (same origin). `app/api-proxy/[...path]/route.ts` forwards to
+   * `BACKEND_URL` (default `http://127.0.0.1:8000`). Set `BACKEND_URL` on Cloud Run at runtime — no
+   * rebuild when the API URL changes. Use `NEXT_PUBLIC_API_PROXY=false` + `NEXT_PUBLIC_API_URL` to
+   * call the API directly from the browser (requires CORS on the API).
    */
-  async rewrites() {
-    if (process.env.NODE_ENV !== "development") return [];
-    const target = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
-    return [{ source: "/api-proxy/:path*", destination: `${target}/:path*` }];
-  },
 };
 
 export default nextConfig;
